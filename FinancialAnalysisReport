@@ -375,7 +375,7 @@ FROM vw_product_yoy
 WHERE year = 2025
 ORDER BY product_line, quarter;
 
---Revenue comparision view
+--Revenue comparison view
 CREATE OR REPLACE VIEW vw_product_revenue_comparison AS
 SELECT
     year,
@@ -393,7 +393,7 @@ SELECT
     profit
 FROM vw_product_profitability;
 
---Profit margin comparision
+--Profit margin comparison
 CREATE OR REPLACE VIEW vw_product_margin_comparison AS
 SELECT
     year,
