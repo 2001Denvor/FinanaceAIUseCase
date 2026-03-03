@@ -1,0 +1,17 @@
+year,quarter,pnl_line,actual_amount,budget_amount,variance,variance_percent
+2024,Q1,Revenue,1000000,null,null,0
+2024,Q1,Tax,-90000,null,null,0
+2024,Q1,Opex,-500000,null,null,0
+2024,Q1,Depreciation,-50000,null,null,0
+2024,Q2,Depreciation,-52000,null,null,0
+2024,Q2,Tax,-95000,null,null,0
+2024,Q2,Revenue,1100000,null,null,0
+2024,Q2,Opex,-535000,null,null,0
+2025,Q1,Opex,-590000,-565000,-25000,0.0442
+2025,Q1,Depreciation,-60000,-58000,-2000,0.0345
+2025,Q1,Tax,-110000,-105000,-5000,0.0476
+2025,Q1,Revenue,1300000,1250000,50000,0.04
+2025,Q2,Depreciation,-65000,null,null,0
+2025,Q2,Opex,-625000,null,null,0
+2025,Q2,Revenue,1400000,null,null,0
+2025,Q2,Tax,-120000,null,null,0

@@ -1,0 +1,9 @@
+product_line,year,quarter,current_revenue,previous_year_revenue,revenue_variance,yoy_growth_percent
+Product A,2024,Q1,600000,null,null,0
+Product B,2024,Q1,400000,null,null,0
+Product A,2024,Q2,650000,null,null,0
+Product B,2024,Q2,450000,null,null,0
+Product A,2025,Q1,750000,600000,150000,0.25
+Product B,2025,Q1,550000,400000,150000,0.375
+Product A,2025,Q2,800000,650000,150000,0.2308
+Product B,2025,Q2,600000,450000,150000,0.3333
