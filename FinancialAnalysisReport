@@ -384,7 +384,7 @@ SELECT
     revenue
 FROM vw_product_profitability;
 
---profit comparision view 
+--profit comparison view 
 CREATE OR REPLACE VIEW vw_product_profit_comparison AS
 SELECT
     year,
