@@ -1,0 +1,406 @@
+  /* Financial Analysis & Product Profitability Dashboard
+                                        Author: Ganga Fernando
+                                        Platform: Databricks*/
+
+
+--Create GL transaction table
+CREATE OR REPLACE TABLE gl_transactions AS
+SELECT * FROM VALUES
+-- 2024
+('4001','Sales Revenue', 1000000, 2024, 'Q1'),
+('5001','Salaries', -300000, 2024, 'Q1'),
+('5002','Marketing', -120000, 2024, 'Q1'),
+('5003','Rent', -80000, 2024, 'Q1'),
+('6001','Depreciation', -50000, 2024, 'Q1'),
+('7001','Tax', -90000, 2024, 'Q1'),
+
+('4001','Sales Revenue', 1100000, 2024, 'Q2'),
+('5001','Salaries', -320000, 2024, 'Q2'),
+('5002','Marketing', -130000, 2024, 'Q2'),
+('5003','Rent', -85000, 2024, 'Q2'),
+('6001','Depreciation', -52000, 2024, 'Q2'),
+('7001','Tax', -95000, 2024, 'Q2'),
+
+-- 2025
+('4001','Sales Revenue', 1300000, 2025, 'Q1'),
+('5001','Salaries', -350000, 2025, 'Q1'),
+('5002','Marketing', -150000, 2025, 'Q1'),
+('5003','Rent', -90000, 2025, 'Q1'),
+('6001','Depreciation', -60000, 2025, 'Q1'),
+('7001','Tax', -110000, 2025, 'Q1'),
+
+('4001','Sales Revenue', 1400000, 2025, 'Q2'),
+('5001','Salaries', -370000, 2025, 'Q2'),
+('5002','Marketing', -160000, 2025, 'Q2'),
+('5003','Rent', -95000, 2025, 'Q2'),
+('6001','Depreciation', -65000, 2025, 'Q2'),
+('7001','Tax', -120000, 2025, 'Q2')
+
+AS t(gl_code, account_name, amount, year, quarter);
+
+--Create GL mapping table
+CREATE OR REPLACE TABLE gl_mapping AS
+SELECT * FROM VALUES
+('4001','Revenue'),
+('5001','Opex'),
+('5002','Opex'),
+('5003','Opex'),
+('6001','Depreciation'),
+('7001','Tax')
+AS t(gl_code, pnl_line);
+
+--Create Budget Table
+CREATE OR REPLACE TABLE budget AS
+SELECT * FROM VALUES
+('4001', 2025, 'Q1', 1250000),
+('5001', 2025, 'Q1', -340000),
+('5002', 2025, 'Q1', -140000),
+('5003', 2025, 'Q1', -85000),
+('6001', 2025, 'Q1', -58000),
+('7001', 2025, 'Q1', -105000)
+AS t(gl_code, year, quarter, budget_amount);
+
+--Create view panal summary
+CREATE OR REPLACE VIEW vw_pnl_summary AS
+SELECT
+    g.year,
+    g.quarter,
+    SUM(CASE WHEN m.pnl_line = 'Revenue' THEN g.amount ELSE 0 END) AS revenue,
+    SUM(CASE WHEN m.pnl_line = 'Opex' THEN g.amount ELSE 0 END) AS opex,
+    SUM(CASE WHEN m.pnl_line = 'Depreciation' THEN g.amount ELSE 0 END) AS depreciation,
+    SUM(CASE WHEN m.pnl_line = 'Tax' THEN g.amount ELSE 0 END) AS tax
+FROM gl_transactions g
+LEFT JOIN gl_mapping m
+ON g.gl_code = m.gl_code
+GROUP BY g.year, g.quarter;
+
+--Create P&L summary view
+CREATE OR REPLACE VIEW vw_pnl_waterfall AS
+SELECT year, quarter, '1. Revenue' AS metric, revenue AS value, 1 as sort_id
+FROM vw_pnl_summary
+UNION ALL
+SELECT year, quarter, '2. Opex', -ABS(opex), 2
+FROM vw_pnl_summary
+UNION ALL
+SELECT year, quarter, '3. Depreciation', -ABS(depreciation), 3
+FROM vw_pnl_summary
+UNION ALL
+SELECT year, quarter, '4. Tax', -ABS(tax), 4
+FROM vw_pnl_summary
+UNION ALL
+SELECT year, quarter, '5. Profit After Tax', 
+       revenue + opex + depreciation + tax, 5
+FROM vw_pnl_summary;
+
+
+--Create final corporate P&L view
+CREATE OR REPLACE VIEW vw_pnl_final AS
+SELECT
+    year,
+    quarter,
+    CONCAT(quarter, ' ', year) AS period,
+
+    revenue,
+    opex,
+    depreciation,
+    tax,
+
+    ABS(opex + depreciation + tax) AS total_expense,
+
+    revenue + opex AS EBITDA,
+    revenue + opex + depreciation AS operating_profit,
+    revenue + opex + depreciation + tax AS profit_after_tax,
+
+    CASE 
+        WHEN revenue <> 0 
+        THEN (revenue + opex) / revenue
+        ELSE NULL
+    END AS EBITDA_margin
+
+FROM vw_pnl_summary;
+
+--Create YOY variance view
+-- Modified version for easier charting
+CREATE OR REPLACE VIEW vw_yoy_variance AS
+SELECT
+    a.year,
+    a.quarter,
+    ROUND(
+        CASE 
+            WHEN b.revenue <> 0 
+            THEN ((a.revenue - b.revenue) / b.revenue) * 100 -- Multiply by 100 here
+            ELSE NULL
+        END
+    ,2) AS yoy_growth_percentage -- Clearer name
+FROM vw_pnl_final a
+LEFT JOIN vw_pnl_final b
+    ON a.quarter = b.quarter AND a.year = b.year + 1;
+
+--Revenue Trend
+SELECT
+    year,
+    quarter,
+    period,
+    revenue,
+    EBITDA,
+    operating_profit,
+    profit_after_tax,
+    EBITDA_margin
+FROM vw_pnl_final
+ORDER BY year, quarter;
+
+
+--Expense Break down
+CREATE OR REPLACE VIEW vw_expense_positive AS
+SELECT
+    year,
+    quarter,
+    CONCAT(quarter,' ',year) AS period,
+    ABS(opex) AS opex,
+    ABS(depreciation) AS depreciation,
+    ABS(tax) AS tax
+FROM vw_pnl_final;
+
+--YOY Revenue
+SELECT
+    quarter,
+    yoy_growth_percentage  
+FROM vw_yoy_variance
+WHERE year = 2025;
+
+--Waterfall sql for all quarter
+SELECT * 
+FROM vw_pnl_waterfall
+WHERE year = 2025 AND quarter = 'Q1';
+
+--Quator on quator variance
+CREATE OR REPLACE VIEW vw_qoq_variance AS
+WITH ordered_data AS (
+    SELECT
+        year,
+        quarter,
+        revenue,
+        LAG(revenue) OVER (
+            PARTITION BY year 
+            ORDER BY 
+                CASE quarter
+                    WHEN 'Q1' THEN 1
+                    WHEN 'Q2' THEN 2
+                    WHEN 'Q3' THEN 3
+                    WHEN 'Q4' THEN 4
+                END
+        ) AS previous_quarter_revenue
+    FROM vw_pnl_final
+)
+
+SELECT
+    year,
+    quarter,
+    revenue AS current_revenue,
+    previous_quarter_revenue,
+    revenue - previous_quarter_revenue AS variance,
+
+    ROUND(
+        CASE 
+            WHEN previous_quarter_revenue <> 0
+            THEN (revenue - previous_quarter_revenue) 
+                 / previous_quarter_revenue
+            ELSE 0
+        END
+    ,4) AS variance_percent
+
+FROM ordered_data;
+                                        --YOD vs previous YOD
+
+--Create    YOD view
+CREATE OR REPLACE VIEW vw_ytd_summary AS
+SELECT
+    year,
+    SUM(revenue) AS ytd_revenue,
+    SUM(EBITDA) AS ytd_ebitda,
+    SUM(operating_profit) AS ytd_operating_profit,
+    SUM(profit_after_tax) AS ytd_profit_after_tax
+FROM vw_pnl_final
+GROUP BY year; 
+
+
+--Compare YOD vs last year
+CREATE OR REPLACE VIEW vw_ytd_variance AS
+SELECT
+    a.year,
+    a.ytd_revenue AS current_ytd,
+    b.ytd_revenue AS previous_ytd,
+    (a.ytd_revenue - b.ytd_revenue) AS variance,
+
+    ROUND(
+        CASE 
+            WHEN b.ytd_revenue <> 0
+            THEN (a.ytd_revenue - b.ytd_revenue) / b.ytd_revenue
+            ELSE 0
+        END
+    ,4) AS variance_percent
+
+FROM vw_ytd_summary a
+LEFT JOIN vw_ytd_summary b
+    ON a.year = b.year + 1;
+
+
+                                --Budget vs Actual variance
+
+
+ --Create Budget vs actual view                               
+CREATE OR REPLACE VIEW vw_budget_vs_actual AS
+SELECT
+    g.year,
+    g.quarter,
+    m.pnl_line,
+
+    SUM(g.amount) AS actual_amount,
+    SUM(b.budget_amount) AS budget_amount,
+
+    SUM(g.amount) - SUM(b.budget_amount) AS variance,
+
+    ROUND(
+        CASE 
+            WHEN SUM(b.budget_amount) <> 0
+            THEN (SUM(g.amount) - SUM(b.budget_amount)) 
+                 / SUM(b.budget_amount)
+            ELSE 0
+        END
+    ,4) AS variance_percent
+
+FROM gl_transactions g
+LEFT JOIN budget b
+    ON g.gl_code = b.gl_code
+    AND g.year = b.year
+    AND g.quarter = b.quarter
+LEFT JOIN gl_mapping m
+    ON g.gl_code = m.gl_code
+GROUP BY g.year, g.quarter, m.pnl_line;
+
+--Download CSV files for creating pptx
+
+SELECT * FROM vw_pnl_final ORDER BY year, quarter;
+SELECT * FROM vw_yoy_variance ORDER BY year, quarter;
+SELECT * FROM vw_budget_vs_actual ORDER BY year, quarter;
+SELECT * FROM vw_qoq_variance ORDER BY year, quarter;
+SELECT * FROM vw_expense_positive ORDER BY year, quarter;
+SELECT * FROM vw_pnl_waterfall ORDER BY year, quarter;
+SELECT * FROM vw_ytd_summary ORDER BY year;
+
+
+                                            -- Product Line Profitability Analysis
+
+ --Create product sales table
+ CREATE OR REPLACE TABLE product_sales (
+product_line STRING,
+revenue DOUBLE,
+cost DOUBLE,
+year INT,
+quarter STRING
+);                                           
+
+--Insert sample products data
+INSERT INTO product_sales VALUES
+-- 2024 Q1
+('Product A', 600000, 350000, 2024, 'Q1'),
+('Product B', 400000, 250000, 2024, 'Q1'),
+
+-- 2024 Q2
+('Product A', 650000, 370000, 2024, 'Q2'),
+('Product B', 450000, 280000, 2024, 'Q2'),
+
+-- 2025 Q1
+('Product A', 750000, 420000, 2025, 'Q1'),
+('Product B', 550000, 320000, 2025, 'Q1'),
+
+-- 2025 Q2
+('Product A', 800000, 450000, 2025, 'Q2'),
+('Product B', 600000, 350000, 2025, 'Q2');
+
+
+--Create products profitability view
+CREATE OR REPLACE VIEW vw_product_profitability AS
+SELECT
+    year,
+    quarter,
+    product_line,
+    revenue,
+    cost,
+    revenue - cost AS profit,
+
+    ROUND(
+        CASE 
+            WHEN revenue <> 0 
+            THEN (revenue - cost) / revenue
+            ELSE 0
+        END
+    ,4) AS profit_margin
+
+FROM product_sales;
+
+--view result
+SELECT * 
+FROM vw_product_profitability
+ORDER BY year, quarter, product_line;
+
+--Create Product YOY view 
+CREATE OR REPLACE VIEW vw_product_yoy AS
+SELECT
+    a.product_line,
+    a.year,
+    a.quarter,
+    a.revenue AS current_revenue,
+    b.revenue AS previous_year_revenue,
+
+    a.revenue - b.revenue AS revenue_variance,
+
+    ROUND(
+        CASE 
+            WHEN b.revenue <> 0 
+            THEN (a.revenue - b.revenue) / b.revenue
+            ELSE 0
+        END
+    ,4) AS yoy_growth_percent
+
+FROM vw_product_profitability a
+LEFT JOIN vw_product_profitability b
+    ON a.product_line = b.product_line
+    AND a.quarter = b.quarter
+    AND a.year = b.year + 1;
+
+    --view 2025 YOY
+    SELECT *
+FROM vw_product_yoy
+WHERE year = 2025
+ORDER BY product_line, quarter;
+
+--Revenue comparison view
+CREATE OR REPLACE VIEW vw_product_revenue_comparison AS
+SELECT
+    year,
+    quarter,
+    product_line,
+    revenue
+FROM vw_product_profitability;
+
+--profit comparison view 
+CREATE OR REPLACE VIEW vw_product_profit_comparison AS
+SELECT
+    year,
+    quarter,
+    product_line,
+    profit
+FROM vw_product_profitability;
+
+--Profit margin comparison
+CREATE OR REPLACE VIEW vw_product_margin_comparison AS
+SELECT
+    year,
+    quarter,
+    product_line,
+    profit_margin
+FROM vw_product_profitability;
+
+SELECT year, quarter, product_line, revenue
+FROM vw_product_profitability
