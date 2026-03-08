@@ -1,4 +1,4 @@
-  /* Financial Analysis & Product Profitability Dashboard
+                               /* Financial Analysis & Product Profitability Dashboard
                                         Author: Ganga Fernando
                                         Platform: Databricks*/
 
@@ -74,23 +74,37 @@ LEFT JOIN gl_mapping m
 ON g.gl_code = m.gl_code
 GROUP BY g.year, g.quarter;
 
---Create P&L summary view
+            --Create P&L summary view
 CREATE OR REPLACE VIEW vw_pnl_waterfall AS
-SELECT year, quarter, '1. Revenue' AS metric, revenue AS value, 1 as sort_id
+
+SELECT year, quarter, 'Revenue' AS metric, revenue AS value
 FROM vw_pnl_summary
+
 UNION ALL
-SELECT year, quarter, '2. Opex', -ABS(opex), 2
+
+SELECT year, quarter, 'Opex', -ABS(opex)
 FROM vw_pnl_summary
+
 UNION ALL
-SELECT year, quarter, '3. Depreciation', -ABS(depreciation), 3
+
+SELECT year, quarter, 'Depreciation', -ABS(depreciation)
 FROM vw_pnl_summary
+
 UNION ALL
-SELECT year, quarter, '4. Tax', -ABS(tax), 4
+
+SELECT year, quarter, 'Tax', -ABS(tax)
 FROM vw_pnl_summary
+
 UNION ALL
-SELECT year, quarter, '5. Profit After Tax', 
-       revenue + opex + depreciation + tax, 5
+
+SELECT year, quarter, 'Profit After Tax',
+       revenue + opex + depreciation + tax
 FROM vw_pnl_summary;
+
+--Waterfall sql for all quarter
+SELECT * 
+FROM vw_pnl_waterfall
+WHERE year = 2025 AND quarter = 'Q1';
 
 
 --Create final corporate P&L view
@@ -128,7 +142,7 @@ SELECT
     ROUND(
         CASE 
             WHEN b.revenue <> 0 
-            THEN ((a.revenue - b.revenue) / b.revenue) * 100 -- Multiply by 100 here
+            THEN ((a.revenue - b.revenue) / b.revenue)
             ELSE NULL
         END
     ,2) AS yoy_growth_percentage -- Clearer name
@@ -167,11 +181,6 @@ SELECT
     yoy_growth_percentage  
 FROM vw_yoy_variance
 WHERE year = 2025;
-
---Waterfall sql for all quarter
-SELECT * 
-FROM vw_pnl_waterfall
-WHERE year = 2025 AND quarter = 'Q1';
 
 --Quator on quator variance
 CREATE OR REPLACE VIEW vw_qoq_variance AS
@@ -403,4 +412,1003 @@ SELECT
 FROM vw_product_profitability;
 
 SELECT year, quarter, product_line, revenue
-FROM vw_product_profitability
+FROM vw_product_profitability;
+
+--Download CSV files
+SELECT * FROM vw_product_profitability ORDER BY year, quarter;
+SELECT * FROM vw_product_yoy ORDER BY year, quarter;
+SELECT * FROM vw_product_revenue_comparison ORDER BY year, quarter;
+SELECT * FROM vw_product_profit_comparison ORDER BY year, quarter;
+SELECT * FROM vw_product_margin_comparison ORDER BY year, quarter;
+
+
+                                    --Supplier wise expenditure report
+
+--Create supplier table
+
+CREATE OR REPLACE TABLE gl_transactions_with_suppliers (
+    gl_code STRING,
+    account_name STRING,
+    amount INT,
+    year INT,
+    quarter STRING,
+    supplier_name STRING,
+    transaction_date DATE
+);
+
+INSERT INTO gl_transactions_with_suppliers (gl_code, account_name, amount, year, quarter, supplier_name, transaction_date)
+VALUES
+-- Supplier A
+('4001','Advertising', 20000, 2024, 'Q1', 'Supplier A', '2024-01-15'),
+('4001','Advertising', 22000, 2023, 'Q4', 'Supplier A', '2023-12-10'),
+('4001','Advertising', 18000, 2022, 'Q4', 'Supplier A', '2022-11-05'),
+('4001','Advertising', 21000, 2021, 'Q2', 'Supplier A', '2021-06-20'),
+('4001','Advertising', 19000, 2020, 'Q1', 'Supplier A', '2020-03-10'),
+
+-- Supplier B
+('4002','Advertising', 15000, 2024, 'Q1', 'Supplier B', '2024-02-10'),
+('4002','Advertising', 17000, 2023, 'Q3', 'Supplier B', '2023-08-18'),
+('4002','Advertising', 16000, 2022, 'Q3', 'Supplier B', '2022-09-12'),
+('4002','Advertising', 14000, 2021, 'Q2', 'Supplier B', '2021-04-05'),
+('4002','Advertising', 13000, 2020, 'Q3', 'Supplier B', '2020-07-22'),
+
+-- Supplier C
+('4003','Advertising', 25000, 2024, 'Q1', 'Supplier C', '2024-03-15'),
+('4003','Advertising', 30000, 2023, 'Q2', 'Supplier C', '2023-06-10'),
+('4003','Advertising', 20000, 2022, 'Q4', 'Supplier C', '2022-11-05'),
+('4003','Advertising', 22000, 2021, 'Q3', 'Supplier C', '2021-08-12'),
+('4003','Advertising', 18000, 2020, 'Q2', 'Supplier C', '2020-05-25'),
+
+-- Supplier D
+('4004','Advertising', 18000, 2024, 'Q2', 'Supplier D', '2024-04-20'),
+('4004','Advertising', 16000, 2023, 'Q3', 'Supplier D', '2023-07-12'),
+('4004','Advertising', 17000, 2022, 'Q4', 'Supplier D', '2022-10-15'),
+('4004','Advertising', 15000, 2021, 'Q2', 'Supplier D', '2021-05-18'),
+('4004','Advertising', 14000, 2020, 'Q3', 'Supplier D', '2020-09-05'),
+
+-- Supplier E
+('4005','Advertising', 20000, 2024, 'Q2', 'Supplier E', '2024-05-05'),
+('4005','Advertising', 22000, 2023, 'Q4', 'Supplier E', '2023-11-10'),
+('4005','Advertising', 21000, 2022, 'Q4', 'Supplier E', '2022-12-20'),
+('4005','Advertising', 19000, 2021, 'Q1', 'Supplier E', '2021-03-15'),
+('4005','Advertising', 18000, 2020, 'Q2', 'Supplier E', '2020-06-22');
+
+-- Top 5 Suppliers by 5-year total advertising spend
+SELECT
+    supplier_name,
+    SUM(amount) AS total_5yr_ad_expense
+FROM gl_transactions_with_suppliers
+WHERE account_name = 'Advertising'
+GROUP BY supplier_name
+ORDER BY total_5yr_ad_expense DESC
+LIMIT 5;
+
+-- Total Advertising Expenditure
+SELECT
+    SUM(amount) AS total_advertising_expense
+FROM gl_transactions_with_suppliers
+WHERE account_name = 'Advertising';
+
+-- Monthly trend of advertising expenses per supplier
+WITH monthly_data AS (
+    SELECT
+        supplier_name,
+        CONCAT(year, '-', LPAD(MONTH(transaction_date),2,'0')) AS year_month,
+        SUM(amount) AS monthly_ad_expense
+    FROM gl_transactions_with_suppliers
+    WHERE account_name='Advertising'
+    GROUP BY supplier_name, year, MONTH(transaction_date)
+)
+SELECT *
+FROM monthly_data
+ORDER BY supplier_name, year_month;
+
+-- Quarterly trend of advertising expenses per supplier
+WITH quarterly_data AS (
+    SELECT
+        supplier_name,
+        CONCAT(year, '-Q', quarter) AS year_quarter,
+        SUM(amount) AS quarterly_ad_expense
+    FROM gl_transactions_with_suppliers
+    WHERE account_name='Advertising'
+    GROUP BY supplier_name, year, quarter
+)
+SELECT *
+FROM quarterly_data
+ORDER BY supplier_name, year_quarter;
+
+-- Supplier contribution to total advertising expenses
+WITH supplier_total AS (
+    SELECT
+        supplier_name,
+        SUM(amount) AS total_expense
+    FROM gl_transactions_with_suppliers
+    WHERE account_name='Advertising'
+    GROUP BY supplier_name
+)
+SELECT *
+FROM supplier_total
+ORDER BY total_expense DESC;
+
+
+--Download CSV files
+
+SELECT * FROM gl_transactions_with_suppliers; 
+
+/* -------------------------------------------------------
+   1️⃣ Q1 2025 Variance Report
+   Combined view: variance, favorable/unfavorable status, reason
+------------------------------------------------------- */
+CREATE OR REPLACE VIEW vw_final_variance_q1_2025 AS
+SELECT
+    g.year,
+    g.quarter,
+    m.pnl_line,
+    SUM(g.amount) AS actual_amount,
+    SUM(b.budget_amount) AS budget_amount,
+    SUM(g.amount) - SUM(b.budget_amount) AS variance_amount,
+    ROUND(
+        CASE WHEN SUM(b.budget_amount) <> 0
+            THEN ((SUM(g.amount) - SUM(b.budget_amount)) / ABS(SUM(b.budget_amount))) 
+            ELSE 0
+        END, 2
+    ) AS variance_percent,
+    CASE 
+        WHEN m.pnl_line = 'Revenue' AND SUM(g.amount) > SUM(b.budget_amount) THEN 'Favorable'
+        WHEN m.pnl_line <> 'Revenue' AND SUM(g.amount) > SUM(b.budget_amount) THEN 'Unfavorable'
+        ELSE 'Favorable'
+    END AS variance_status,
+    CASE 
+        WHEN m.pnl_line = 'Revenue' THEN 'Higher sales and strong product demand'
+        WHEN m.pnl_line = 'Opex' THEN 'Increased salaries and marketing campaigns'
+        WHEN m.pnl_line = 'Depreciation' THEN 'New asset additions during the quarter'
+        WHEN m.pnl_line = 'Tax' THEN 'Higher profit led to increased tax expense'
+        ELSE 'N/A'
+    END AS variance_reason
+FROM gl_transactions g
+LEFT JOIN budget b
+    ON g.gl_code = b.gl_code
+    AND g.year = b.year
+    AND g.quarter = b.quarter
+LEFT JOIN gl_mapping m
+    ON g.gl_code = m.gl_code
+WHERE g.year = 2025 AND g.quarter='Q1'
+GROUP BY g.year, g.quarter, m.pnl_line
+ORDER BY m.pnl_line;
+
+
+/* -------------------------------------------------------
+   2️⃣ Full-Year 2025 Variance
+   Aggregated over all 4 quarters
+------------------------------------------------------- */
+CREATE OR REPLACE VIEW vw_full_year_2025_variance AS
+SELECT
+    m.pnl_line,
+    SUM(g.amount) AS total_actual_2025,
+    SUM(b.budget_amount) AS total_budget_2025,
+    SUM(g.amount) - SUM(b.budget_amount) AS variance_amount,
+    ROUND(
+        CASE WHEN SUM(b.budget_amount) <> 0
+            THEN ((SUM(g.amount) - SUM(b.budget_amount)) / ABS(SUM(b.budget_amount))) 
+            ELSE 0
+        END, 2
+    ) AS variance_percent
+FROM gl_transactions g
+LEFT JOIN budget b
+    ON g.gl_code = b.gl_code
+    AND g.year = b.year
+    AND g.quarter = b.quarter
+LEFT JOIN gl_mapping m
+    ON g.gl_code = m.gl_code
+WHERE g.year = 2025
+GROUP BY m.pnl_line
+ORDER BY m.pnl_line;
+
+
+/* -------------------------------------------------------
+    Waterfall-Friendly Q1 2025 Variance
+   Step-wise variance for charts / presentation
+------------------------------------------------------- */
+CREATE OR REPLACE VIEW vw_variance_waterfall_2025_q1 AS
+SELECT 
+    'Revenue Variance' AS metric,
+    SUM(CASE WHEN m.pnl_line='Revenue' THEN g.amount - b.budget_amount END) AS value,
+    1 AS sort_id
+FROM gl_transactions g
+JOIN budget b 
+    ON g.gl_code=b.gl_code AND g.year=b.year AND g.quarter=b.quarter
+JOIN gl_mapping m 
+    ON g.gl_code=m.gl_code
+WHERE g.year=2025 AND g.quarter='Q1'
+
+UNION ALL
+SELECT 
+    'Opex Variance',
+    SUM(CASE WHEN m.pnl_line='Opex' THEN g.amount - b.budget_amount END),
+    2
+FROM gl_transactions g
+JOIN budget b 
+    ON g.gl_code=b.gl_code AND g.year=b.year AND g.quarter=b.quarter
+JOIN gl_mapping m 
+    ON g.gl_code=m.gl_code
+WHERE g.year=2025 AND g.quarter='Q1'
+
+UNION ALL
+SELECT 
+    'Depreciation Variance',
+    SUM(CASE WHEN m.pnl_line='Depreciation' THEN g.amount - b.budget_amount END),
+    3
+FROM gl_transactions g
+JOIN budget b 
+    ON g.gl_code=b.gl_code AND g.year=b.year AND g.quarter=b.quarter
+JOIN gl_mapping m 
+    ON g.gl_code=m.gl_code
+WHERE g.year=2025 AND g.quarter='Q1'
+
+UNION ALL
+SELECT 
+    'Tax Variance',
+    SUM(CASE WHEN m.pnl_line='Tax' THEN g.amount - b.budget_amount END),
+    4
+FROM gl_transactions g
+JOIN budget b 
+    ON g.gl_code=b.gl_code AND g.year=b.year AND g.quarter=b.quarter
+JOIN gl_mapping m 
+    ON g.gl_code=m.gl_code
+WHERE g.year=2025 AND g.quarter='Q1';
+
+--Download csv files
+SELECT * FROM vw_variance_waterfall_2025_q1;
+SELECT * FROM vw_full_year_2025_variance;
+SELECT * FROM vw_final_variance_q1_2025;
+                                    
+SELECT * FROM gl_transactions_with_suppliers; 
+
+
+                                    --Accrual Entry process
+
+
+-- Create the circuit_list table (if not already exists)
+CREATE OR REPLACE TABLE circuit_list (
+    supplier_name STRING,
+    gl_code STRING,
+    amount INT,
+    service_month DATE
+);
+
+-- Insert sample records (run only once)
+INSERT INTO circuit_list (supplier_name, gl_code, amount, service_month)
+VALUES
+('Dialog Telecom', '5001', 15000, DATE('2025-03-01')),
+('SLT Broadband', '5002', 10000, DATE('2025-03-01')),
+('Mobitel', '5002', 20000, DATE('2025-02-01')),
+('Hutch Telecom', '5003', 12000, DATE('2025-03-01')),
+('Etisalat', '5001', 8000, DATE('2025-03-01'));
+
+-- Create a clean view for unbilled accruals (all derived fields included)
+CREATE OR REPLACE VIEW vw_accrual_report AS
+SELECT 
+    c.supplier_name,
+    c.gl_code,
+    c.amount AS accrual_amount,
+    c.service_month,
+    YEAR(c.service_month) AS year,
+    CONCAT('Q', QUARTER(c.service_month)) AS quarter,
+
+    -- Total accrual across all unbilled circuits
+    SUM(c.amount) OVER () AS total_accrual,
+
+    -- Accrual % of total accrual
+    c.amount  / SUM(c.amount) OVER () AS accrual_percent,
+
+    -- Aging calculation
+    DATEDIFF(CURRENT_DATE(), c.service_month) AS aging_days,
+    CASE 
+        WHEN DATEDIFF(CURRENT_DATE(), c.service_month) <= 30 THEN '0-30 Days'
+        WHEN DATEDIFF(CURRENT_DATE(), c.service_month) <= 60 THEN '31-60 Days'
+        ELSE '60+ Days'
+    END AS aging_bucket
+
+FROM circuit_list c
+LEFT JOIN gl_transactions_with_suppliers g
+    ON LOWER(TRIM(c.supplier_name)) = LOWER(TRIM(g.supplier_name))
+    AND c.gl_code = g.gl_code
+    AND MONTH(c.service_month) = MONTH(g.transaction_date)
+    AND YEAR(c.service_month) = YEAR(g.transaction_date)
+WHERE g.supplier_name IS NULL  -- only unbilled invoices
+ORDER BY c.gl_code, c.supplier_name, c.service_month;
+
+--Download csv files
+SELECT * FROM vw_accrual_report;
+SELECT * FROM circuit_list;
+
+select * from gl_transactions_with_suppliers;
+
+
+                            --FX Revalution
+
+
+-- Manual FX rate table
+CREATE OR REPLACE TABLE fx_rates_manual (
+    month_end DATE,
+    currency STRING,
+    rate_to_lkr DECIMAL(18,4)
+);
+
+
+-- Month-end balances per supplier in original FC
+CREATE OR REPLACE VIEW vw_fx_revaluation AS
+
+WITH month_end_balance AS (
+    SELECT
+        supplier_name,
+        gl_code,
+        LAST_DAY(transaction_date) AS month_end,
+        SUM(amount) AS balance_fc
+    FROM gl_transactions_with_suppliers
+    GROUP BY supplier_name, gl_code, LAST_DAY(transaction_date)
+),
+
+joined_fx AS (
+    SELECT
+        m.supplier_name,
+        m.gl_code,
+        m.month_end,
+        m.balance_fc,
+        f.rate_to_lkr,
+        (m.balance_fc * f.rate_to_lkr) AS balance_lkr
+    FROM month_end_balance m
+    LEFT JOIN fx_rates_manual f
+        ON m.month_end = f.month_end
+)
+
+SELECT
+    supplier_name,
+    gl_code,
+    month_end,
+    balance_fc,
+    rate_to_lkr,
+    balance_lkr,
+    LAG(balance_lkr) OVER (
+        PARTITION BY supplier_name, gl_code
+        ORDER BY month_end
+    ) AS prev_balance_lkr,
+    balance_lkr -
+    LAG(balance_lkr) OVER (
+        PARTITION BY supplier_name, gl_code
+        ORDER BY month_end
+    ) AS reval_gain_loss
+FROM joined_fx;
+
+SELECT * FROM vw_fx_revaluation;
+
+SELECT DISTINCT month_end
+FROM vw_fx_revaluation
+ORDER BY month_end;
+
+
+DESCRIBE fx_rates_manual;
+
+INSERT INTO fx_rates_manual (month_end, currency, rate_to_lkr)
+VALUES
+('2020-03-31','USD',182.0000),
+('2020-05-31','USD',185.0000),
+('2020-06-30','USD',188.0000),
+('2020-07-31','USD',190.0000),
+('2020-09-30','USD',195.0000),
+
+('2021-03-31','USD',200.0000),
+('2021-04-30','USD',202.0000),
+('2021-05-31','USD',203.0000),
+('2021-06-30','USD',205.0000),
+('2021-08-31','USD',208.0000),
+
+('2022-09-30','USD',360.0000),
+('2022-10-31','USD',365.0000),
+('2022-11-30','USD',370.0000),
+('2022-12-31','USD',375.0000),
+
+('2023-06-30','USD',320.0000),
+('2023-07-31','USD',325.0000),
+('2023-08-31','USD',330.0000),
+('2023-11-30','USD',350.0000),
+('2023-12-31','USD',360.0000),
+
+('2024-01-31','USD',365.5000),
+('2024-02-29','USD',366.0000),
+('2024-03-31','USD',367.2000),
+('2024-04-30','USD',368.0000),
+('2024-05-31','USD',369.0000);
+
+CREATE OR REPLACE VIEW vw_fx_revaluation_dashboard_clean AS
+WITH monthly_balance AS (
+    -- Step 1: Aggregate all transactions per supplier + gl_code + month
+    SELECT
+        supplier_name,
+        gl_code,
+        LAST_DAY(transaction_date) AS month_end,
+        SUM(amount) AS balance_fc
+    FROM gl_transactions_with_suppliers
+    GROUP BY supplier_name, gl_code, LAST_DAY(transaction_date)
+),
+
+fx_distinct AS (
+    -- Step 2: Remove any duplicate FX rows
+    SELECT DISTINCT month_end, currency, rate_to_lkr
+    FROM fx_rates_manual
+),
+
+monthly_with_fx AS (
+    -- Step 3: Join monthly balances with FX
+    SELECT
+        m.supplier_name,
+        m.gl_code,
+        m.month_end,
+        m.balance_fc,
+        f.rate_to_lkr,
+        m.balance_fc * f.rate_to_lkr AS balance_lkr
+    FROM monthly_balance m
+    LEFT JOIN fx_distinct f
+        ON m.month_end = f.month_end
+        AND f.currency = 'USD'
+)
+
+-- Step 4: Calculate previous balance and revaluation gain/loss safely
+SELECT
+    supplier_name,
+    gl_code,
+    month_end,
+    balance_fc,
+    rate_to_lkr,
+    balance_lkr,
+    COALESCE(
+        LAG(balance_lkr) OVER (PARTITION BY supplier_name ORDER BY month_end),
+        0
+    ) AS prev_balance_lkr,
+    COALESCE(
+        balance_lkr - LAG(balance_lkr) OVER (PARTITION BY supplier_name ORDER BY month_end),
+        0
+    ) AS reval_gain_loss
+FROM monthly_with_fx
+ORDER BY supplier_name, month_end;
+
+INSERT INTO fx_rates_manual (month_end, currency, rate_to_lkr) VALUES
+('2025-01-31','USD',370.2500),
+('2025-02-28','USD',371.1000),
+('2025-03-31','USD',372.4500),
+('2025-04-30','USD',373.2000),
+('2025-05-31','USD',374.0000),
+('2025-06-30','USD',374.8500),
+('2025-07-31','USD',375.3000),
+('2025-08-31','USD',376.1000),
+('2025-09-30','USD',376.9500),
+('2025-10-31','USD',377.5000),
+('2025-11-30','USD',378.2000),
+('2025-12-31','USD',379.0000);
+
+INSERT INTO gl_transactions_with_suppliers
+(gl_code, account_name, amount, year, quarter, supplier_name, transaction_date)
+VALUES
+('4001','Advertising',21000,2025,'Q1','Supplier A','2025-01-15'),
+('4002','Advertising',16000,2025,'Q1','Supplier B','2025-02-10'),
+('4003','Advertising',27000,2025,'Q1','Supplier C','2025-03-12'),
+('4004','Advertising',19000,2025,'Q2','Supplier D','2025-04-18'),
+('4005','Advertising',22000,2025,'Q2','Supplier E','2025-05-20');
+
+--Download CSV file
+SELECT * FROM vw_fx_revaluation_dashboard_clean;
+
+                                --Aging setup
+
+--Create source table
+CREATE OR REPLACE TABLE voice_operator_transactions (
+    operator_name STRING,
+    transaction_type STRING, -- Debtor or Creditor
+    amount INT,
+    invoice_date DATE
+);
+
+INSERT INTO voice_operator_transactions VALUES
+('Dialog','Debtor',10000,'2025-01-10'),
+('Dialog','Creditor',3000,'2025-01-20'),
+('Airtel','Debtor',8000,'2025-01-15'),
+('Airtel','Creditor',10000,'2025-02-05'),
+('Mobitel','Debtor',12000,'2025-01-25'),
+('Mobitel','Creditor',2000,'2025-02-01');
+
+--Calculate net balance
+CREATE OR REPLACE VIEW vw_net_debtor_balance AS
+SELECT
+    operator_name,
+    invoice_date,
+    SUM(CASE WHEN transaction_type = 'Debtor' THEN amount ELSE 0 END) -
+    SUM(CASE WHEN transaction_type = 'Creditor' THEN amount ELSE 0 END) 
+    AS net_balance
+FROM voice_operator_transactions
+GROUP BY operator_name, invoice_date;
+
+--Calculate agin days
+CREATE OR REPLACE VIEW vw_debtor_aging_days AS
+SELECT
+    operator_name,
+    net_balance,
+    invoice_date,
+    DATEDIFF(day, invoice_date, CURRENT_DATE) AS aging_days
+FROM vw_net_debtor_balance;
+
+--Create agin bucket
+CREATE OR REPLACE VIEW vw_net_debtor_aging_bucket AS
+SELECT
+    operator_name,
+    net_balance,
+    aging_days,
+    
+    CASE 
+        WHEN aging_days BETWEEN 0 AND 30 THEN '0-30 Days'
+        WHEN aging_days BETWEEN 31 AND 60 THEN '31-60 Days'
+        WHEN aging_days BETWEEN 61 AND 90 THEN '61-90 Days'
+        ELSE '90+ Days'
+    END AS aging_bucket
+
+FROM vw_debtor_aging_days;
+
+--Final bucket summary
+CREATE OR REPLACE VIEW vw_net_debtor_aging_summary AS
+SELECT
+    operator_name,
+    aging_bucket,
+    SUM(net_balance) AS total_net_balance
+FROM vw_net_debtor_aging_bucket
+GROUP BY operator_name, aging_bucket
+ORDER BY operator_name;
+
+--Download CSV file
+SELECT * FROM vw_net_debtor_aging_summary;
+
+                            --Bulk Assert Creation
+
+--Create assert input
+CREATE OR REPLACE TABLE asset_bulk_input (
+    batch_id STRING,
+    asset_group STRING,
+    quantity INT,
+    unit_cost DECIMAL(18,2),
+    purchase_date DATE,
+    useful_life INT
+);
+
+INSERT INTO asset_bulk_input VALUES
+('BATCH001','Laptop',5,150000,'2025-01-10',3),
+('BATCH002','Router',3,50000,'2025-02-15',5),
+('BATCH003','Printer',2,80000,'2025-03-20',4);
+
+--Create Assert Master table
+CREATE OR REPLACE TABLE assets_main (
+    asset_code STRING,
+    asset_name STRING,
+    asset_group STRING,
+    purchase_date DATE,
+    purchase_value DECIMAL(18,2),
+    useful_life INT,
+    batch_id STRING
+);
+
+--Generate multiple assert
+INSERT INTO assets_main
+
+SELECT
+    CONCAT('AST', LPAD(ROW_NUMBER() OVER (ORDER BY batch_id, seq),5,'0')) AS asset_code,
+    CONCAT(asset_group,'-',seq) AS asset_name,
+    asset_group,
+    purchase_date,
+    unit_cost,
+    useful_life,
+    batch_id
+
+FROM asset_bulk_input
+LATERAL VIEW explode(sequence(1, quantity)) t AS seq;
+
+--Create capitalization summary
+CREATE OR REPLACE VIEW vw_asset_capitalization AS
+
+SELECT
+    YEAR(purchase_date) AS year,
+    asset_group,
+    COUNT(asset_code) AS total_assets,
+    SUM(purchase_value) AS total_capitalized_value
+FROM assets_main
+GROUP BY YEAR(purchase_date), asset_group;
+
+--Assert depreciation
+CREATE OR REPLACE VIEW vw_asset_depreciation AS
+
+SELECT
+    asset_code,
+    asset_name,
+    purchase_value,
+    useful_life,
+    purchase_value / useful_life AS annual_depreciation
+FROM assets_main;
+
+SELECT * FROM vw_asset_capitalization;
+SELECT * FROM vw_asset_depreciation;
+
+
+                    --Budget Forecast
+
+--2025 Actual
+CREATE OR REPLACE VIEW vw_actuals_2025_with_journals AS
+SELECT
+    gl_code,
+    account_name,
+    SUM(amount) AS total_2025
+FROM gl_transactions
+WHERE year = 2025
+GROUP BY gl_code, account_name;
+
+--2026 Current year data
+CREATE OR REPLACE VIEW vw_actuals_2026 AS
+SELECT
+    gl_code,
+    account_name,
+    SUM(amount) AS total_2026
+FROM gl_transactions
+WHERE year = 2026
+GROUP BY gl_code, account_name;
+
+--Claculate growth trend
+CREATE OR REPLACE VIEW vw_growth_trend AS
+SELECT
+    a.gl_code,
+    a.account_name,
+    a.total_2025,
+    COALESCE(b.total_2026,0) AS total_2026,
+    
+    CASE
+        WHEN a.total_2025 = 0 THEN 0
+        ELSE (COALESCE(b.total_2026,0) - a.total_2025) / a.total_2025
+    END AS growth_rate
+
+FROM vw_actuals_2025_with_journals a
+LEFT JOIN vw_actuals_2026 b
+ON a.gl_code = b.gl_code;    
+
+--Quarterly Trend Analysis
+SELECT
+    year,
+    quarter,
+    account_name,
+    SUM(amount) AS quarterly_amount
+FROM gl_transactions
+GROUP BY year, quarter, account_name
+ORDER BY year, quarter;
+
+
+--Budget forecast (2027)
+CREATE OR REPLACE VIEW vw_budget_forecast_2027 AS
+SELECT
+    gl_code,
+    account_name,
+    total_2025,
+    growth_rate,
+
+    CASE
+        WHEN growth_rate <= -1 THEN total_2025 * 1.05
+        ELSE total_2025 * (1 + growth_rate)
+    END AS forecast_2027
+
+FROM vw_growth_trend;
+
+SELECT *
+FROM vw_budget_forecast_2027
+ORDER BY forecast_2027 DESC;
+
+--Trend + baseline growth
+SELECT
+gl_code,
+account_name,
+total_2025,
+total_2025 * 1.05 AS forecast_2027
+FROM vw_actuals_2025_with_journals;
+
+CREATE OR REPLACE VIEW vw_growth_trend_realistic AS
+SELECT
+    a.gl_code,
+    a.account_name,
+    a.total_2025,
+    CASE 
+        WHEN a.account_name = 'Sales Revenue' THEN 0.10
+        WHEN a.account_name = 'Salaries' THEN 0.04
+        WHEN a.account_name = 'Marketing' THEN 0.06
+        WHEN a.account_name = 'Rent' THEN 0.02
+        WHEN a.account_name = 'Depreciation' THEN 0.03
+        WHEN a.account_name = 'Tax' THEN 0.05
+        ELSE 0.05
+    END AS growth_rate,
+    a.total_2025 * (1 + CASE 
+        WHEN a.account_name = 'Sales Revenue' THEN 0.10
+        WHEN a.account_name = 'Salaries' THEN 0.04
+        WHEN a.account_name = 'Marketing' THEN 0.06
+        WHEN a.account_name = 'Rent' THEN 0.02
+        WHEN a.account_name = 'Depreciation' THEN 0.03
+        WHEN a.account_name = 'Tax' THEN 0.05
+        ELSE 0.05
+    END) AS forecast_2027
+FROM vw_actuals_2025_with_journals a;
+
+
+
+SELECT
+    account_name,
+    total_2025,
+    total_2025 / SUM(total_2025) OVER () AS weight,
+    (total_2025 / SUM(total_2025) OVER ()) * 0.1 AS growth_rate, -- weighted 10% max growth
+    total_2025 * (1 + (total_2025 / SUM(total_2025) OVER ()) * 0.1) AS forecast_2027
+FROM vw_actuals_2025_with_journals;
+
+
+--Download CSV file
+SELECT * FROM vw_actuals_2025_with_journals;
+SELECT * FROM vw_actuals_2026;
+SELECT * FROM vw_growth_trend_realistic;
+SELECT * FROM vw_budget_forecast_2027;
+
+                        --Monthly Expense Analysis
+
+
+-- Create gl_transactions_expense table
+CREATE OR REPLACE TABLE gl_transactions_expense (
+    gl_code STRING,
+    account_name STRING,
+    amount DOUBLE,
+    transaction_date DATE,
+    entry_type STRING   -- NORMAL / JOURNAL
+);
+
+INSERT INTO gl_transactions_expense VALUES
+('5001','Salaries',-300000,'2025-01-10','NORMAL'),
+('5002','Marketing',-120000,'2025-01-15','NORMAL'),
+('5003','Rent',-80000,'2025-01-05','NORMAL'),
+
+('5001','Salaries',-310000,'2025-02-10','NORMAL'),
+('5002','Marketing',-100000,'2025-02-20','NORMAL'),
+('5003','Rent',-80000,'2025-02-05','NORMAL'),
+
+('5002','Marketing',-20000,'2025-02-25','JOURNAL'),
+
+('5001','Salaries',-320000,'2025-03-10','NORMAL'),
+('5002','Marketing',-140000,'2025-03-18','NORMAL'),
+('5003','Rent',-80000,'2025-03-05','NORMAL');
+
+--Create Monthly Expense summary
+CREATE OR REPLACE VIEW vw_monthly_expense AS
+
+SELECT
+YEAR(transaction_date) AS year,
+MONTH(transaction_date) AS month,
+account_name,
+SUM(amount) AS total_expense
+FROM gl_transactions_expense
+GROUP BY
+YEAR(transaction_date),
+MONTH(transaction_date),
+account_name
+ORDER BY year, month;
+
+--Monthly variance vs previous month
+CREATE OR REPLACE VIEW vw_expense_variance AS
+
+SELECT
+year,
+month,
+account_name,
+total_expense,
+
+LAG(total_expense) OVER (
+PARTITION BY account_name
+ORDER BY year, month
+) AS previous_month_expense,
+
+total_expense -
+LAG(total_expense) OVER (
+PARTITION BY account_name
+ORDER BY year, month
+) AS variance
+
+FROM vw_monthly_expense;
+
+--Trend analysis for the year
+CREATE OR REPLACE VIEW vw_expense_trend AS
+
+SELECT
+YEAR(transaction_date) AS year,
+MONTH(transaction_date) AS month,
+SUM(amount) AS monthly_expense
+FROM gl_transactions_expense
+GROUP BY
+YEAR(transaction_date),
+MONTH(transaction_date)
+ORDER BY year, month;
+
+
+--Analysis without journal entries
+CREATE OR REPLACE VIEW vw_expense_without_journal AS
+
+SELECT
+YEAR(transaction_date) AS year,
+MONTH(transaction_date) AS month,
+SUM(amount) AS expense_without_journal
+FROM gl_transactions_expense
+WHERE entry_type != 'JOURNAL'
+GROUP BY
+YEAR(transaction_date),
+MONTH(transaction_date)
+ORDER BY year, month;
+
+--Analysis with journal entries
+CREATE OR REPLACE VIEW vw_expense_with_journal AS
+
+SELECT
+YEAR(transaction_date) AS year,
+MONTH(transaction_date) AS month,
+SUM(amount) AS expense_with_journal
+FROM gl_transactions_expense
+GROUP BY
+YEAR(transaction_date),
+MONTH(transaction_date)
+ORDER BY year, month;
+
+--Final comparison dataset
+CREATE OR REPLACE VIEW vw_expense_comparison AS
+
+SELECT
+a.year,
+a.month,
+a.expense_without_journal,
+b.expense_with_journal,
+b.expense_with_journal - a.expense_without_journal AS journal_impact
+FROM vw_expense_without_journal a
+JOIN vw_expense_with_journal b
+ON a.year = b.year
+AND a.month = b.month
+ORDER BY year, month;
+
+
+--Download CSV files
+SELECT * FROM vw_monthly_expense;
+SELECT * FROM vw_expense_trend;
+SELECT * FROM vw_expense_comparison;
+
+
+                    --Depreciation Forecast
+
+--Prepare source table
+CREATE OR REPLACE TABLE fa_assets (
+    asset_code STRING,
+    asset_name STRING,
+    asset_group STRING,
+    purchase_date DATE,
+    purchase_value DECIMAL(18,2),
+    useful_life_months INT,
+    depreciation_method STRING,  -- 'SL' = Straight Line
+    accumulated_depr DECIMAL(18,2)
+);  
+
+--CWIP table
+CREATE OR REPLACE TABLE cwip (
+    cwip_code STRING,
+    asset_name STRING,
+    asset_group STRING,
+    cwip_amount DECIMAL(18,2),
+    expected_cap_date DATE,
+    useful_life_months INT,
+    depreciation_method STRING
+);
+
+--Create a calendar /forecast table
+-- Create a table with monthly forecast dates
+CREATE OR REPLACE TABLE calendar_months AS
+WITH months AS (
+    SELECT add_months(to_date('2026-03-01'), seq) AS forecast_month
+    FROM (SELECT posexplode(sequence(0,11)) AS (seq, val)) t
+)
+SELECT forecast_month
+FROM months;
+
+--Calculate Monthly Depreciation for Existing Assets
+CREATE OR REPLACE VIEW monthly_fa_depr AS
+SELECT
+    c.forecast_month,
+    a.asset_code,
+    a.asset_group,
+    a.purchase_value,
+    a.useful_life_months,
+    CASE 
+        WHEN a.depreciation_method = 'SL' 
+        THEN (a.purchase_value / a.useful_life_months)
+        ELSE 0
+    END AS monthly_depreciation
+FROM fa_assets a
+CROSS JOIN calendar_months c
+WHERE c.forecast_month >= a.purchase_date
+AND c.forecast_month < date_add(a.purchase_date, a.useful_life_months * 30); -- approximate end of life
+
+
+--Calculate Monthly Depreciation for CWIP Assets
+CREATE OR REPLACE VIEW monthly_cwip_depr AS
+SELECT
+    c.forecast_month,
+    w.cwip_code AS asset_code,
+    w.asset_group,
+    w.cwip_amount AS purchase_value,
+    w.useful_life_months,
+    CASE 
+        WHEN w.depreciation_method = 'SL' 
+        THEN (w.cwip_amount / w.useful_life_months)
+        ELSE 0
+    END AS monthly_depreciation
+FROM cwip w
+CROSS JOIN calendar_months c
+WHERE c.forecast_month >= w.expected_cap_date
+AND c.forecast_month < date_add(w.expected_cap_date, w.useful_life_months * 30);
+
+
+--Combine FA + CWIP Depreciation
+CREATE OR REPLACE VIEW monthly_total_depr AS
+SELECT
+    forecast_month,
+    asset_group,
+    SUM(monthly_depreciation) AS total_depreciation
+FROM (
+    SELECT forecast_month, asset_group, monthly_depreciation FROM monthly_fa_depr
+    UNION ALL
+    SELECT forecast_month, asset_group, monthly_depreciation FROM monthly_cwip_depr
+) t
+GROUP BY forecast_month, asset_group
+ORDER BY forecast_month, asset_group;
+
+INSERT INTO fa_assets VALUES
+('A001','Laptop','IT','2024-01-01',300000,36,'SL',0),
+('A002','Server','IT','2023-06-01',900000,60,'SL',0),
+('A003','Office Furniture','Furniture','2025-01-01',200000,48,'SL',0),
+('A004','Vehicle','Transport','2024-07-01',2500000,60,'SL',0);
+
+INSERT INTO cwip VALUES
+('CW001','Network Equipment','IT',500000,'2026-05-01',48,'SL'),
+('CW002','Office Renovation','Building',1200000,'2026-07-01',120,'SL');
+
+--Depreciation Forecast
+SELECT
+forecast_month,
+asset_group,
+SUM(monthly_depreciation) AS total_depreciation
+FROM (
+SELECT
+c.forecast_month,
+a.asset_group,
+a.purchase_value / a.useful_life_months AS monthly_depreciation
+FROM fa_assets a
+CROSS JOIN calendar_months c
+
+UNION ALL
+
+SELECT
+c.forecast_month,
+w.asset_group,
+w.cwip_amount / w.useful_life_months
+FROM cwip w
+CROSS JOIN calendar_months c
+WHERE c.forecast_month >= w.expected_cap_date
+) t
+GROUP BY forecast_month, asset_group
+ORDER BY forecast_month;
+
+
+SELECT
+asset_group,
+SUM(cwip_amount) AS cwip_value
+FROM cwip
+GROUP BY asset_group;
+
+
+SELECT * FROM monthly_total_depr;
