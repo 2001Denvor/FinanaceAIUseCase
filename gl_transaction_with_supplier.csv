@@ -1,0 +1,26 @@
+gl_code,account_name,amount,year,quarter,supplier_name,transaction_date
+4001,Advertising,20000,2024,Q1,Supplier A,2024-01-15
+4001,Advertising,22000,2023,Q4,Supplier A,2023-12-10
+4001,Advertising,18000,2022,Q4,Supplier A,2022-11-05
+4001,Advertising,21000,2021,Q2,Supplier A,2021-06-20
+4001,Advertising,19000,2020,Q1,Supplier A,2020-03-10
+4002,Advertising,15000,2024,Q1,Supplier B,2024-02-10
+4002,Advertising,17000,2023,Q3,Supplier B,2023-08-18
+4002,Advertising,16000,2022,Q3,Supplier B,2022-09-12
+4002,Advertising,14000,2021,Q2,Supplier B,2021-04-05
+4002,Advertising,13000,2020,Q3,Supplier B,2020-07-22
+4003,Advertising,25000,2024,Q1,Supplier C,2024-03-15
+4003,Advertising,30000,2023,Q2,Supplier C,2023-06-10
+4003,Advertising,20000,2022,Q4,Supplier C,2022-11-05
+4003,Advertising,22000,2021,Q3,Supplier C,2021-08-12
+4003,Advertising,18000,2020,Q2,Supplier C,2020-05-25
+4004,Advertising,18000,2024,Q2,Supplier D,2024-04-20
+4004,Advertising,16000,2023,Q3,Supplier D,2023-07-12
+4004,Advertising,17000,2022,Q4,Supplier D,2022-10-15
+4004,Advertising,15000,2021,Q2,Supplier D,2021-05-18
+4004,Advertising,14000,2020,Q3,Supplier D,2020-09-05
+4005,Advertising,20000,2024,Q2,Supplier E,2024-05-05
+4005,Advertising,22000,2023,Q4,Supplier E,2023-11-10
+4005,Advertising,21000,2022,Q4,Supplier E,2022-12-20
+4005,Advertising,19000,2021,Q1,Supplier E,2021-03-15
+4005,Advertising,18000,2020,Q2,Supplier E,2020-06-22

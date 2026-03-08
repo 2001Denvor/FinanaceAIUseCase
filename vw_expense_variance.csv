@@ -1,0 +1,10 @@
+year,month,account_name,total_expense,previous_month_expense,variance
+2025,1,Marketing,-120000,,
+2025,2,Marketing,-120000,-120000,0
+2025,3,Marketing,-140000,-120000,-20000
+2025,1,Rent,-80000,,
+2025,2,Rent,-80000,-80000,0
+2025,3,Rent,-80000,-80000,0
+2025,1,Salaries,-300000,,
+2025,2,Salaries,-310000,-300000,-10000
+2025,3,Salaries,-320000,-310000,-10000

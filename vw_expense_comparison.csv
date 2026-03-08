@@ -1,0 +1,4 @@
+year,month,expense_without_journal,expense_with_journal,journal_impact
+2025,1,-500000,-500000,0
+2025,2,-490000,-510000,-20000
+2025,3,-540000,-540000,0

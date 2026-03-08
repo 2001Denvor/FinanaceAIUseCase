@@ -1,0 +1,5 @@
+year,quarter,pnl_line,actual_amount,budget_amount,variance_amount,variance_percent,variance_status,variance_reason
+2025,Q1,Depreciation,-60000,-58000,-2000,-0.03,Favorable,New asset additions during the quarter
+2025,Q1,Opex,-590000,-565000,-25000,-0.04,Favorable,Increased salaries and marketing campaigns
+2025,Q1,Revenue,1300000,1250000,50000,0.04,Favorable,Higher sales and strong product demand
+2025,Q1,Tax,-110000,-105000,-5000,-0.05,Favorable,Higher profit led to increased tax expense
